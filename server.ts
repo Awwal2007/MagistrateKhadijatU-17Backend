@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -10,7 +11,7 @@ import { connectDB, dbTeam, dbPlayer, dbOfficial, Team, Player, Official } from 
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "MAGISTRATE_KHADIJAT_OLOYADE_SUPER_SECRET_KEY";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin@123";
 
 
 

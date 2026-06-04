@@ -1,5 +1,33 @@
 {
-  "teams": [],
-  "players": [],
-  "officials": []
+  "teams": [
+    {
+      "_id": "opc1s3lmfmpzbwakz",
+      "clubName": "United Fc",
+      "email": "awwalsaminu9@gmail.com",
+      "passwordHash": "$2b$10$zqpi72yCtKfWrI3MctjTz.BTPiu6w6Hus8t33lrV0JV.92kmjZrqu",
+      "logoUrl": "https://res.cloudinary.com/dlwdq32ki/image/upload/v1780567466/magistrate_u17/logo-1780567454352.png",
+      "createdAt": "2026-06-04T10:04:27.155Z"
+    }
+  ],
+  "players": [
+    {
+      "_id": "oecsyfa98mpzbwbcv",
+      "teamId": "opc1s3lmfmpzbwakz",
+      "name": "Saminu Awwal",
+      "age": 10,
+      "position": "Midfielder",
+      "category": "Under-17",
+      "photoUrl": "https://res.cloudinary.com/dlwdq32ki/image/upload/v1780567467/magistrate_u17/player-opc1s3lmfmpzbwakz-1780567467194.jpg",
+      "jerseyNumber": 1
+    }
+  ],
+  "officials": [
+    {
+      "_id": "ry1oiqp20mpzbwc43",
+      "teamId": "opc1s3lmfmpzbwakz",
+      "name": "Saminu Awwal",
+      "position": "Head Coach",
+      "photoUrl": "https://res.cloudinary.com/dlwdq32ki/image/upload/v1780567468/magistrate_u17/official-opc1s3lmfmpzbwakz-1780567468190.jpg"
+    }
+  ]
 }
