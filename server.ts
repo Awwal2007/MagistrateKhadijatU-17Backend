@@ -3,10 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
 import { body, validationResult } from "express-validator";
+import { v2 as cloudinary } from "cloudinary";
 import { connectDB, dbTeam, dbPlayer, dbOfficial, Team, Player, Official } from "./server/db.js";
 
 const app = express();
@@ -14,50 +12,34 @@ const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "MAGISTRATE_KHADIJAT_OLOYADE_SUPER_SECRET_KEY";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
-// -------------------------------------------------------------
-// Initialization & Direct Directories Checks
-// -------------------------------------------------------------
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+
 
 // -------------------------------------------------------------
-// Multi-route Form & Upload Config
+// Cloudinary Config
 // -------------------------------------------------------------
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || ".jpg";
-    const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, "");
-    cb(null, `${baseName}-${Date.now()}-${Math.floor(Math.random() * 1000)}${ext}`);
-  }
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Helper to save a Base64 string directly into uploads folder
-function handleImageSave(imageInput: string, prefix: string): string {
+// Helper to save a Base64 string directly to Cloudinary
+async function handleImageSave(imageInput: string, prefix: string): Promise<string> {
   if (!imageInput) return "/placeholder-logo.png";
-  if (imageInput.startsWith("/uploads/")) {
+  if (imageInput.startsWith("/uploads/") || imageInput.startsWith("http")) {
     return imageInput;
   }
   if (imageInput.startsWith("data:image/")) {
-    const match = imageInput.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (!match) {
-      throw new Error("Invalid base64 image data structure");
+    try {
+      const result = await cloudinary.uploader.upload(imageInput, {
+        folder: "magistrate_u17",
+        public_id: `${prefix}-${Date.now()}`
+      });
+      return result.secure_url;
+    } catch (error) {
+      console.error("Cloudinary Upload Error:", error);
+      throw new Error("Failed to upload image to Cloudinary");
     }
-    const ext = match[1];
-    const dataString = match[2];
-    const buffer = Buffer.from(dataString, "base64");
-    const filename = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`;
-    const filepath = path.join(uploadsDir, filename);
-    fs.writeFileSync(filepath, buffer);
-    return `/uploads/${filename}`;
   }
   return imageInput;
 }
@@ -89,8 +71,7 @@ app.use(
   })
 );
 
-// Serve uploads folder as static files
-app.use("/uploads", express.static(uploadsDir));
+
 
 // Connect Database
 connectDB();
@@ -174,7 +155,7 @@ app.post(
       // Save logo
       let finalLogoUrl = "/placeholder-logo.png";
       if (logo) {
-        finalLogoUrl = handleImageSave(logo, "logo");
+        finalLogoUrl = await handleImageSave(logo, "logo");
       }
 
       const team = await dbTeam.create({
@@ -366,7 +347,7 @@ app.post(
       // Save player photo
       let finalPhotoUrl = "/placeholder-card.png";
       if (photo) {
-        finalPhotoUrl = handleImageSave(photo, `player-${id}`);
+        finalPhotoUrl = await handleImageSave(photo, `player-${id}`);
       }
 
       // Auto assign jersey number as chronological added order (or fallback math to avoid conflicts)
@@ -432,7 +413,7 @@ app.post(
 
       let finalPhotoUrl = "/placeholder-card.png";
       if (photo) {
-        finalPhotoUrl = handleImageSave(photo, `official-${id}`);
+        finalPhotoUrl = await handleImageSave(photo, `official-${id}`);
       }
 
       const official = await dbOfficial.create({
@@ -514,6 +495,10 @@ app.get("/api/admin/teams", verifyAdminToken, async (req: express.Request, res: 
 });
 
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`⚽ Magistrate Khadijat Oloyade Under 17 Portal listening on: http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`⚽ Magistrate Khadijat Oloyade Under 17 Portal listening on: http://localhost:${PORT}`);
+  });
+}
+
+export default app;
