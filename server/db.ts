@@ -7,7 +7,7 @@ import path from "path";
 export interface Team {
   _id: string;
   clubName: string;
-  email: string;
+  username: string;
   passwordHash: string;
   logoUrl: string;
   createdAt: string;
@@ -39,7 +39,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 
 const TeamSchema = new mongoose.Schema<Team>({
   clubName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   logoUrl: { type: String, required: true },
   createdAt: { type: String, default: () => new Date().toISOString() }

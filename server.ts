@@ -83,7 +83,7 @@ connectDB();
 interface AuthenticatedRequest extends express.Request {
   user?: {
     id: string;
-    email: string;
+    username: string;
     role: "team" | "admin";
   };
 }
@@ -103,7 +103,7 @@ const verifyToken = (req: AuthenticatedRequest, res: express.Response, next: exp
 
   const token = parts[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: "team" | "admin" };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string; role: "team" | "admin" };
     req.user = decoded;
     next();
   } catch (err) {
@@ -130,7 +130,7 @@ app.post(
   "/api/auth/register",
   [
     body("clubName").trim().notEmpty().withMessage("Club Name is required"),
-    body("email").trim().isEmail().withMessage("Valid email is required"),
+    body("username").trim().isLength({ min: 3 }).withMessage("Username must be at least 3 characters long"),
     body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
   ],
   async (req: express.Request, res: express.Response) => {
@@ -140,14 +140,13 @@ app.post(
       return;
     }
 
-    const { clubName, email, password, logo } = req.body;
+    const { clubName, username, password, logo } = req.body;
 
     try {
-      // Check existing email
-      const existing = await dbTeam.findOne({ email });
+      // Check existing username
+      const existing = await dbTeam.findOne({ username });
       if (existing) {
-        res.status(400).json({ message: "A club with this email address has already registered." });
-        return;
+        return res.status(400).json({ message: "A club with this username has already registered." });
       }
 
       // Hash password
@@ -161,12 +160,12 @@ app.post(
 
       const team = await dbTeam.create({
         clubName,
-        email,
+        username,
         passwordHash,
         logoUrl: finalLogoUrl
       });
 
-      const token = jwt.sign({ id: team._id, email: team.email, role: "team" }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: team._id, username: team.username, role: "team" }, JWT_SECRET, { expiresIn: "7d" });
 
       res.status(201).json({
         message: "Registration successful!",
@@ -174,7 +173,7 @@ app.post(
         team: {
           id: team._id,
           clubName: team.clubName,
-          email: team.email,
+          username: team.username,
           logoUrl: team.logoUrl
         }
       });
@@ -189,7 +188,7 @@ app.post(
 app.post(
   "/api/auth/login",
   [
-    body("email").trim().isEmail().withMessage("Valid email is required"),
+    body("username").trim().isLength({ min: 3 }).withMessage("Username is required"),
     body("password").notEmpty().withMessage("Password is required")
   ],
   async (req: express.Request, res: express.Response) => {
@@ -199,22 +198,21 @@ app.post(
       return;
     }
 
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
     try {
-      const team = await dbTeam.findOne({ email });
+      const team = await dbTeam.findOne({ username });
       if (!team) {
-        res.status(401).json({ message: "Invalid email or password." });
-        return;
+        return res.status(401).json({ message: "Invalid username or password." });
       }
 
       const isMatch = await bcrypt.compare(password, team.passwordHash);
       if (!isMatch) {
-        res.status(401).json({ message: "Invalid email or password." });
+        res.status(401).json({ message: "Invalid username or password." });
         return;
       }
 
-      const token = jwt.sign({ id: team._id, email: team.email, role: "team" }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: team._id, username: team.username, role: "team" }, JWT_SECRET, { expiresIn: "7d" });
 
       res.json({
         message: "Login successful!",
@@ -222,7 +220,7 @@ app.post(
         team: {
           id: team._id,
           clubName: team.clubName,
-          email: team.email,
+          username: team.username,
           logoUrl: team.logoUrl
         }
       });
@@ -245,12 +243,12 @@ app.post("/api/auth/admin-login", async (req: express.Request, res: express.Resp
     return;
   }
 
-  const token = jwt.sign({ id: "admin", email: "admin@competition.org", role: "admin" }, JWT_SECRET, { expiresIn: "3d" });
+  const token = jwt.sign({ id: "admin", username: "admin", role: "admin" }, JWT_SECRET, { expiresIn: "3d" });
   res.json({
     message: "Admin verification successful!",
     token,
     admin: {
-      email: "admin@competition.org",
+      username: "admin",
       role: "admin"
     }
   });
@@ -280,7 +278,7 @@ app.get("/api/teams/:id", verifyToken, async (req: AuthenticatedRequest, res: ex
       team: {
         id: team._id,
         clubName: team.clubName,
-        email: team.email,
+        username: team.username,
         logoUrl: team.logoUrl,
         createdAt: team.createdAt
       },
@@ -316,15 +314,13 @@ app.post(
       return;
     }
 
-    const { name, age, position, photo } = req.body;
+    const { name, age, position, photo, category } = req.body;
 
     try {
       // Validate Quota server-side
       const currentPlayers = await dbPlayer.find({ teamId: id });
       
       const parsedAge = parseInt(age, 10);
-      const isUnder17Str = parsedAge <= 17;
-      const category: "Under-17" | "Free Age" = isUnder17Str ? "Under-17" : "Free Age";
 
       const totalCount = currentPlayers.length;
       const u17Count = currentPlayers.filter(p => p.category === "Under-17").length;
@@ -335,13 +331,13 @@ app.post(
         return;
       }
 
-      if (category === "Under-17" && u17Count >= 21) {
-        res.status(400).json({ message: "Under-17 quota is full (Max 21 players)." });
+      if (category === "Under-17" && u17Count >= 20) {
+        res.status(400).json({ message: "Under-17 quota is full (Max 20 players)." });
         return;
       }
 
-      if (category === "Free Age" && freeAgeCount >= 4) {
-        res.status(400).json({ message: "Free Age quota is full (Max 4 players)." });
+      if (category === "Free Age" && freeAgeCount >= 5) {
+        res.status(400).json({ message: "Free Age quota is full (Max 5 players)." });
         return;
       }
 
@@ -480,7 +476,7 @@ app.get("/api/admin/teams", verifyAdminToken, async (req: express.Request, res: 
         return {
           id: t._id,
           clubName: t.clubName,
-          email: t.email,
+          username: t.username,
           logoUrl: t.logoUrl,
           createdAt: t.createdAt,
           players,
