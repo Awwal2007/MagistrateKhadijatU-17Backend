@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import { dbTeam } from "./server/db.js";
+import { dbTeam, connectDB } from "./server/db.js";
 
 dotenv.config();
 
@@ -14,8 +14,17 @@ if (!MONGODB_URI) {
 
 const seedClubs = async () => {
   try {
-    await mongoose.connect(MONGODB_URI);
-    console.log("✅ Connected to MongoDB for seeding...");
+    await connectDB();
+
+    // Drop legacy email index if it exists
+    try {
+      await mongoose.connection.collection('teams').dropIndex('email_1');
+      console.log("🗑️ Dropped legacy 'email' index.");
+    } catch (e: any) {
+      if (e.codeName !== 'IndexNotFound') {
+        console.warn("⚠️ Could not drop email index:", e.message);
+      }
+    }
 
     const passwordHash = await bcrypt.hash("abc123", 10);
 
@@ -107,7 +116,7 @@ const seedClubs = async () => {
     }
 
     console.log(`🎉 Seeding completed successfully! Created ${createdCount} new clubs.`);
-    console.log("Default password for all seeded clubs is: password123");
+    console.log("Default password for all seeded clubs is: abc123");
     
     // Disconnect properly
     await mongoose.disconnect();
