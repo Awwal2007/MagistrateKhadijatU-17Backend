@@ -69,7 +69,7 @@ const seedClubs = async () => {
         clubName: "Lillafi FC",
         username: "lillafifc",
         passwordHash,
-        logoUrl: "https://i.postimg.cc/nXJN157D/Whats-App-Image-2026-06-04-at-10-13-12-PM.jpg",
+        logoUrl: "https://i.postimg.cc/xCWnnPZN/Whats-App-Image-2026-06-05-at-4-19-54-AM.jpg",
       },
       {
         clubName: "Greater FC",
