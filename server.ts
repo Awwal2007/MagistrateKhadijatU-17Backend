@@ -559,13 +559,15 @@ app.post(
     body("homeTeamId").notEmpty().withMessage("Home team is required"),
     body("awayTeamId").notEmpty().withMessage("Away team is required"),
     body("stage").isIn(["Group Stage", "Quarter Final", "Semi Final", "Final"]).withMessage("Invalid match stage"),
-    body("matchDate").notEmpty().withMessage("Match date is required")
+    body("matchDate").notEmpty().withMessage("Match date is required"),
+    body("round").optional()
   ],
   async (req: express.Request, res: express.Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { homeTeamId, awayTeamId, stage, group, matchDate } = req.body;
+    const round = req.body.round || null;
 
     if (homeTeamId === awayTeamId) {
       return res.status(400).json({ message: "Home team and away team cannot be the same." });
@@ -577,6 +579,7 @@ app.post(
         awayTeamId,
         stage,
         group: group || null,
+        round,
         matchDate,
         homeScore: null,
         awayScore: null,
@@ -592,13 +595,14 @@ app.post(
 // PUT /api/admin/matches/:id
 app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { homeScore, awayScore, status, matchDate } = req.body;
+  const { homeScore, awayScore, status, matchDate, round } = req.body;
 
   try {
     const updated = await dbMatch.updateById(id, {
       homeScore: homeScore !== undefined ? homeScore : null,
       awayScore: awayScore !== undefined ? awayScore : null,
       status: status || "Scheduled",
+      round: round !== undefined ? (round || null) : undefined,
       matchDate
     });
 
@@ -625,7 +629,7 @@ app.delete("/api/admin/matches/:id", verifyAdminToken, async (req: express.Reque
 app.post("/api/admin/matches/:id/start-live", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   try {
-    const updated = await dbMatch.updateById(id, { status: "Live", goals: [] });
+    const updated = await dbMatch.updateById(id, { status: "Live", goals: [], cards: [] });
     if (!updated) return res.status(404).json({ message: "Match not found." });
     res.json({ message: "Match started live.", match: updated });
   } catch (err: any) {
@@ -695,6 +699,61 @@ app.delete("/api/admin/matches/:id/goal/:goalIndex", verifyAdminToken, async (re
     res.json({ message: "Goal removed.", match: updated });
   } catch (err: any) {
     res.status(500).json({ message: "Error removing goal.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches/:id/record-card
+app.post("/api/admin/matches/:id/record-card", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const { playerId, playerName, jerseyNumber, team, type, timestamp } = req.body;
+
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    if (!match.cards) match.cards = [];
+    
+    match.cards.push({
+      playerId,
+      playerName,
+      jerseyNumber,
+      team,
+      type,
+      timestamp: timestamp || new Date().toISOString()
+    });
+
+    const updated = await dbMatch.updateById(id, {
+      cards: match.cards
+    });
+
+    res.json({ message: "Card recorded.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error recording card.", error: err.message });
+  }
+});
+
+// DELETE /api/admin/matches/:id/card/:cardIndex
+app.delete("/api/admin/matches/:id/card/:cardIndex", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id, cardIndex } = req.params;
+
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    const index = parseInt(cardIndex);
+    if (!match.cards || isNaN(index) || !match.cards[index]) {
+      return res.status(404).json({ message: "Card not found." });
+    }
+
+    match.cards.splice(index, 1);
+
+    const updated = await dbMatch.updateById(id, {
+      cards: match.cards
+    });
+
+    res.json({ message: "Card removed.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error removing card.", error: err.message });
   }
 });
 

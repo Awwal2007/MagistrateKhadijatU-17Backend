@@ -39,6 +39,7 @@ export interface Match {
   awayScore: number | null;
   status: "Scheduled" | "Live" | "Completed";
   stage: "Group Stage" | "Quarter Final" | "Semi Final" | "Final";
+  round: string | null;
   group: "A" | "B" | "C" | null;
   matchDate: string;
   goals?: Array<{
@@ -46,6 +47,14 @@ export interface Match {
     playerName: string;
     jerseyNumber: number;
     team: "home" | "away";
+    timestamp: string;
+  }>;
+  cards?: Array<{
+    playerId: string;
+    playerName: string;
+    jerseyNumber: number;
+    team: "home" | "away";
+    type: "Yellow" | "Red";
     timestamp: string;
   }>;
 }
@@ -88,6 +97,7 @@ const MatchSchema = new mongoose.Schema<Match>({
   awayScore: { type: Number, default: null },
   status: { type: String, enum: ["Scheduled", "Live", "Completed"], default: "Scheduled" },
   stage: { type: String, enum: ["Group Stage", "Quarter Final", "Semi Final", "Final"], required: true },
+  round: { type: String, default: null },
   group: { type: String, enum: ["A", "B", "C", null], default: null },
   matchDate: { type: String, required: true },
   goals: [{
@@ -95,6 +105,14 @@ const MatchSchema = new mongoose.Schema<Match>({
     playerName: { type: String, required: true },
     jerseyNumber: { type: Number, required: true },
     team: { type: String, enum: ["home", "away"], required: true },
+    timestamp: { type: String, required: true }
+  }],
+  cards: [{
+    playerId: { type: String, required: true },
+    playerName: { type: String, required: true },
+    jerseyNumber: { type: Number, required: true },
+    team: { type: String, enum: ["home", "away"], required: true },
+    type: { type: String, enum: ["Yellow", "Red"], required: true },
     timestamp: { type: String, required: true }
   }]
 });
