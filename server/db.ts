@@ -37,10 +37,17 @@ export interface Match {
   awayTeamId: string;
   homeScore: number | null;
   awayScore: number | null;
-  status: "Scheduled" | "Completed";
+  status: "Scheduled" | "Live" | "Completed";
   stage: "Group Stage" | "Quarter Final" | "Semi Final" | "Final";
   group: "A" | "B" | "C" | null;
   matchDate: string;
+  goals?: Array<{
+    playerId: string;
+    playerName: string;
+    jerseyNumber: number;
+    team: "home" | "away";
+    timestamp: string;
+  }>;
 }
 
 // -------------------------------------------------------------
@@ -79,10 +86,17 @@ const MatchSchema = new mongoose.Schema<Match>({
   awayTeamId: { type: String, required: true },
   homeScore: { type: Number, default: null },
   awayScore: { type: Number, default: null },
-  status: { type: String, enum: ["Scheduled", "Completed"], default: "Scheduled" },
+  status: { type: String, enum: ["Scheduled", "Live", "Completed"], default: "Scheduled" },
   stage: { type: String, enum: ["Group Stage", "Quarter Final", "Semi Final", "Final"], required: true },
   group: { type: String, enum: ["A", "B", "C", null], default: null },
-  matchDate: { type: String, required: true }
+  matchDate: { type: String, required: true },
+  goals: [{
+    playerId: { type: String, required: true },
+    playerName: { type: String, required: true },
+    jerseyNumber: { type: Number, required: true },
+    team: { type: String, enum: ["home", "away"], required: true },
+    timestamp: { type: String, required: true }
+  }]
 });
 
 // Avoid re-compiling models if they are hot-reloaded

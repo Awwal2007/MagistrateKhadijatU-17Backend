@@ -290,6 +290,18 @@ app.get("/api/teams/:id", verifyToken, async (req: AuthenticatedRequest, res: ex
   }
 });
 
+// GET /api/teams/:id/players (for admin live scoring)
+app.get("/api/teams/:id/players", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+
+  try {
+    const players = await dbPlayer.find({ teamId: id });
+    res.json({ players });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching players.", error: err.message });
+  }
+});
+
 // POST /api/teams/:id/players
 app.post(
   "/api/teams/:id/players",
@@ -606,6 +618,124 @@ app.delete("/api/admin/matches/:id", verifyAdminToken, async (req: express.Reque
     else res.status(404).json({ message: "Match not found." });
   } catch (err: any) {
     res.status(500).json({ message: "Error deleting match.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches/:id/start-live
+app.post("/api/admin/matches/:id/start-live", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  try {
+    const updated = await dbMatch.updateById(id, { status: "Live", goals: [] });
+    if (!updated) return res.status(404).json({ message: "Match not found." });
+    res.json({ message: "Match started live.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error starting match.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches/:id/record-goal
+app.post("/api/admin/matches/:id/record-goal", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const { playerId, playerName, jerseyNumber, team } = req.body;
+
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found." });
+
+    if (!match.goals) match.goals = [];
+    
+    match.goals.push({
+      playerId,
+      playerName,
+      jerseyNumber,
+      team,
+      timestamp: new Date().toISOString()
+    });
+
+    // Update scores based on goals
+    const homeGoals = match.goals.filter(g => g.team === "home").length;
+    const awayGoals = match.goals.filter(g => g.team === "away").length;
+
+    const updated = await dbMatch.updateById(id, {
+      goals: match.goals,
+      homeScore: homeGoals,
+      awayScore: awayGoals
+    });
+
+    res.json({ message: "Goal recorded.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error recording goal.", error: err.message });
+  }
+});
+
+// DELETE /api/admin/matches/:id/goal/:goalIndex
+app.delete("/api/admin/matches/:id/goal/:goalIndex", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id, goalIndex } = req.params;
+
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found." });
+
+    if (!match.goals || !match.goals[goalIndex]) {
+      return res.status(404).json({ message: "Goal not found." });
+    }
+
+    match.goals.splice(parseInt(goalIndex), 1);
+
+    // Recalculate scores
+    const homeGoals = match.goals.filter(g => g.team === "home").length;
+    const awayGoals = match.goals.filter(g => g.team === "away").length;
+
+    const updated = await dbMatch.updateById(id, {
+      goals: match.goals,
+      homeScore: homeGoals,
+      awayScore: awayGoals
+    });
+
+    res.json({ message: "Goal removed.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error removing goal.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches/:id/end-live
+app.post("/api/admin/matches/:id/end-live", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  try {
+    const updated = await dbMatch.updateById(id, { status: "Completed" });
+    if (!updated) return res.status(404).json({ message: "Match not found." });
+    res.json({ message: "Match ended.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error ending match.", error: err.message });
+  }
+});
+
+// GET /api/matches/:id/goal-scorers
+app.get("/api/matches/:id/goal-scorers", verifyToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found." });
+
+    const goals = match.goals || [];
+    const homeGoalScorers: Record<string, number> = {};
+    const awayGoalScorers: Record<string, number> = {};
+
+    goals.forEach(goal => {
+      const key = `${goal.playerName} (#${goal.jerseyNumber})`;
+      if (goal.team === "home") {
+        homeGoalScorers[key] = (homeGoalScorers[key] || 0) + 1;
+      } else {
+        awayGoalScorers[key] = (awayGoalScorers[key] || 0) + 1;
+      }
+    });
+
+    res.json({
+      homeGoalScorers: Object.entries(homeGoalScorers).map(([name, goals]) => ({ name, goals })),
+      awayGoalScorers: Object.entries(awayGoalScorers).map(([name, goals]) => ({ name, goals }))
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching goal scorers.", error: err.message });
   }
 });
 
