@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { body, validationResult } from "express-validator";
 import { v2 as cloudinary } from "cloudinary";
-import { connectDB, dbTeam, dbPlayer, dbOfficial, Team, Player, Official } from "./server/db.js";
+import { connectDB, dbTeam, dbPlayer, dbOfficial, dbMatch, Team, Player, Official, Match } from "./server/db.js";
 
 const app = express();
 const PORT = 3000;
@@ -336,8 +336,8 @@ app.post(
         return;
       }
 
-      if (category === "Free Age" && freeAgeCount >= 5) {
-        res.status(400).json({ message: "Free Age quota is full (Max 5 players)." });
+      if (category === "Free Age" && freeAgeCount >= 6) {
+        res.status(400).json({ message: "Free Age quota is full (Max 6 players)." });
         return;
       }
 
@@ -479,6 +479,7 @@ app.get("/api/admin/teams", verifyAdminToken, async (req: express.Request, res: 
           username: t.username,
           logoUrl: t.logoUrl,
           createdAt: t.createdAt,
+          group: t.group,
           players,
           officials
         };
@@ -491,6 +492,199 @@ app.get("/api/admin/teams", verifyAdminToken, async (req: express.Request, res: 
   }
 });
 
+
+// -------------------------------------------------------------
+// TOURNAMENT ROUTES
+// -------------------------------------------------------------
+
+// PUT /api/admin/teams/:id/group
+app.put("/api/admin/teams/:id/group", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const { group } = req.body; // "A", "B", "C", or null
+
+  try {
+    const updated = await dbTeam.updateById(id, { group });
+    if (!updated) {
+      return res.status(404).json({ message: "Team not found." });
+    }
+    res.json({ message: "Team group updated.", team: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error updating team group.", error: err.message });
+  }
+});
+
+// GET /api/matches
+app.get("/api/matches", verifyToken, async (req: express.Request, res: express.Response) => {
+  try {
+    const matches = await dbMatch.find();
+    
+    // Populate team names and logos
+    const populatedMatches = await Promise.all(
+      matches.map(async (m) => {
+        const homeTeam = await dbTeam.findById(m.homeTeamId);
+        const awayTeam = await dbTeam.findById(m.awayTeamId);
+        return {
+          ...m,
+          homeTeamName: homeTeam?.clubName || "Unknown Team",
+          homeTeamLogo: homeTeam?.logoUrl || "/placeholder-logo.png",
+          awayTeamName: awayTeam?.clubName || "Unknown Team",
+          awayTeamLogo: awayTeam?.logoUrl || "/placeholder-logo.png",
+        };
+      })
+    );
+
+    res.json({ matches: populatedMatches });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching matches.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches
+app.post(
+  "/api/admin/matches",
+  verifyAdminToken,
+  [
+    body("homeTeamId").notEmpty().withMessage("Home team is required"),
+    body("awayTeamId").notEmpty().withMessage("Away team is required"),
+    body("stage").isIn(["Group Stage", "Quarter Final", "Semi Final", "Final"]).withMessage("Invalid match stage"),
+    body("matchDate").notEmpty().withMessage("Match date is required")
+  ],
+  async (req: express.Request, res: express.Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { homeTeamId, awayTeamId, stage, group, matchDate } = req.body;
+
+    if (homeTeamId === awayTeamId) {
+      return res.status(400).json({ message: "Home team and away team cannot be the same." });
+    }
+
+    try {
+      const match = await dbMatch.create({
+        homeTeamId,
+        awayTeamId,
+        stage,
+        group: group || null,
+        matchDate,
+        homeScore: null,
+        awayScore: null,
+        status: "Scheduled"
+      });
+      res.status(201).json({ message: "Match scheduled successfully.", match });
+    } catch (err: any) {
+      res.status(500).json({ message: "Error scheduling match.", error: err.message });
+    }
+  }
+);
+
+// PUT /api/admin/matches/:id
+app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const { homeScore, awayScore, status, matchDate } = req.body;
+
+  try {
+    const updated = await dbMatch.updateById(id, {
+      homeScore: homeScore !== undefined ? homeScore : null,
+      awayScore: awayScore !== undefined ? awayScore : null,
+      status: status || "Scheduled",
+      matchDate
+    });
+
+    if (!updated) return res.status(404).json({ message: "Match not found." });
+    res.json({ message: "Match updated.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error updating match.", error: err.message });
+  }
+});
+
+// DELETE /api/admin/matches/:id
+app.delete("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  try {
+    const deleted = await dbMatch.deleteById(id);
+    if (deleted) res.json({ message: "Match deleted successfully." });
+    else res.status(404).json({ message: "Match not found." });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error deleting match.", error: err.message });
+  }
+});
+
+// GET /api/standings
+app.get("/api/standings", verifyToken, async (req: express.Request, res: express.Response) => {
+  try {
+    const teams = await dbTeam.find();
+    const matches = await dbMatch.find({ stage: "Group Stage", status: "Completed" });
+
+    const standings: Record<string, Record<string, any>> = {
+      "A": {}, "B": {}, "C": {}
+    };
+
+    // Initialize standings for teams that have a group
+    teams.forEach(t => {
+      if (t.group && standings[t.group]) {
+        standings[t.group][t._id.toString()] = {
+          teamId: t._id,
+          clubName: t.clubName,
+          logoUrl: t.logoUrl,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDifference: 0,
+          points: 0
+        };
+      }
+    });
+
+    // Calculate match results
+    matches.forEach(m => {
+      if (!m.group || !standings[m.group]) return;
+
+      const homeStats = standings[m.group][m.homeTeamId];
+      const awayStats = standings[m.group][m.awayTeamId];
+
+      if (homeStats && awayStats && m.homeScore !== null && m.awayScore !== null) {
+        homeStats.played += 1;
+        awayStats.played += 1;
+        homeStats.goalsFor += m.homeScore;
+        homeStats.goalsAgainst += m.awayScore;
+        awayStats.goalsFor += m.awayScore;
+        awayStats.goalsAgainst += m.homeScore;
+
+        if (m.homeScore > m.awayScore) {
+          homeStats.won += 1;
+          homeStats.points += 3;
+          awayStats.lost += 1;
+        } else if (m.homeScore < m.awayScore) {
+          awayStats.won += 1;
+          awayStats.points += 3;
+          homeStats.lost += 1;
+        } else {
+          homeStats.drawn += 1;
+          awayStats.drawn += 1;
+          homeStats.points += 1;
+          awayStats.points += 1;
+        }
+
+        homeStats.goalDifference = homeStats.goalsFor - homeStats.goalsAgainst;
+        awayStats.goalDifference = awayStats.goalsFor - awayStats.goalsAgainst;
+      }
+    });
+
+    // Convert to arrays and sort
+    const formattedStandings = {
+      A: Object.values(standings["A"]).sort((a: any, b: any) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor),
+      B: Object.values(standings["B"]).sort((a: any, b: any) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor),
+      C: Object.values(standings["C"]).sort((a: any, b: any) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor)
+    };
+
+    res.json({ standings: formattedStandings });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error calculating standings.", error: err.message });
+  }
+});
 
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, "0.0.0.0", () => {

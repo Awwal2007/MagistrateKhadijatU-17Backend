@@ -102,6 +102,12 @@ const seedClubs = async () => {
         logoUrl: "https://i.postimg.cc/fk7PRC17/Whats-App-Image-2026-06-04-at-9-37-00-PM.jpg",
       },
       {
+        clubName: "Yah-Allahu Fc",
+        username: "yah-alahufc",
+        passwordHash,
+        logoUrl: "https://i.postimg.cc/1nqyNCfv/Whats-App-Image-2026-06-05-at-4-01-55-PM.jpg",
+      },
+      {
         clubName: "Alamu Testing",
         username: "alamutest",
         passwordHash,

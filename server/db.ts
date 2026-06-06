@@ -9,6 +9,7 @@ export interface Team {
   passwordHash: string;
   logoUrl: string;
   createdAt: string;
+  group?: "A" | "B" | "C" | null;
 }
 
 export interface Player {
@@ -30,6 +31,18 @@ export interface Official {
   photoUrl: string;
 }
 
+export interface Match {
+  _id: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: "Scheduled" | "Completed";
+  stage: "Group Stage" | "Quarter Final" | "Semi Final" | "Final";
+  group: "A" | "B" | "C" | null;
+  matchDate: string;
+}
+
 // -------------------------------------------------------------
 // MongoDB configuration with Mongoose
 // -------------------------------------------------------------
@@ -40,7 +53,8 @@ const TeamSchema = new mongoose.Schema<Team>({
   username: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   logoUrl: { type: String, required: true },
-  createdAt: { type: String, default: () => new Date().toISOString() }
+  createdAt: { type: String, default: () => new Date().toISOString() },
+  group: { type: String, enum: ["A", "B", "C", null], default: null }
 });
 
 const PlayerSchema = new mongoose.Schema<Player>({
@@ -60,10 +74,22 @@ const OfficialSchema = new mongoose.Schema<Official>({
   photoUrl: { type: String, required: true }
 });
 
+const MatchSchema = new mongoose.Schema<Match>({
+  homeTeamId: { type: String, required: true },
+  awayTeamId: { type: String, required: true },
+  homeScore: { type: Number, default: null },
+  awayScore: { type: Number, default: null },
+  status: { type: String, enum: ["Scheduled", "Completed"], default: "Scheduled" },
+  stage: { type: String, enum: ["Group Stage", "Quarter Final", "Semi Final", "Final"], required: true },
+  group: { type: String, enum: ["A", "B", "C", null], default: null },
+  matchDate: { type: String, required: true }
+});
+
 // Avoid re-compiling models if they are hot-reloaded
 const TeamModel = mongoose.models.Team || mongoose.model("Team", TeamSchema);
 const PlayerModel = mongoose.models.Player || mongoose.model("Player", PlayerSchema);
 const OfficialModel = mongoose.models.Official || mongoose.model("Official", OfficialSchema);
+const MatchModel = mongoose.models.Match || mongoose.model("Match", MatchSchema);
 
 export async function connectDB() {
   if (!MONGODB_URI) {
@@ -102,6 +128,11 @@ export const dbTeam = {
 
   async findById(id: string): Promise<Team | null> {
     const doc = await (TeamModel as any).findById(id).lean();
+    return doc ? (doc as unknown as Team) : null;
+  },
+
+  async updateById(id: string, updateData: Partial<Team>): Promise<Team | null> {
+    const doc = await (TeamModel as any).findByIdAndUpdate(id, updateData, { returnDocument: "after" }).lean();
     return doc ? (doc as unknown as Team) : null;
   },
 
@@ -150,5 +181,38 @@ export const dbOfficial = {
 
   async deleteByTeamId(teamId: string): Promise<void> {
     await (OfficialModel as any).deleteMany({ teamId });
+  }
+};
+
+export const dbMatch = {
+  async create(matchData: Omit<Match, "_id">): Promise<Match> {
+    const doc = await MatchModel.create(matchData);
+    return doc.toObject() as Match;
+  },
+
+  async find(query: Partial<Match> = {}): Promise<Match[]> {
+    const docs = await (MatchModel as any).find(query as any).sort({ matchDate: 1 }).lean();
+    return docs as unknown as Match[];
+  },
+
+  async findById(id: string): Promise<Match | null> {
+    const doc = await (MatchModel as any).findById(id).lean();
+    return doc ? (doc as unknown as Match) : null;
+  },
+
+  async updateById(id: string, updateData: Partial<Match>): Promise<Match | null> {
+    const doc = await (MatchModel as any).findByIdAndUpdate(id, updateData, { returnDocument: "after" }).lean();
+    return doc ? (doc as unknown as Match) : null;
+  },
+
+  async deleteById(id: string): Promise<boolean> {
+    const result = await (MatchModel as any).findByIdAndDelete(id);
+    return result !== null;
+  },
+
+  async deleteByTeamId(teamId: string): Promise<void> {
+    await (MatchModel as any).deleteMany({
+      $or: [{ homeTeamId: teamId }, { awayTeamId: teamId }]
+    });
   }
 };
