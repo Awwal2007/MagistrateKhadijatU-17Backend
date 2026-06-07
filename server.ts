@@ -629,7 +629,13 @@ app.delete("/api/admin/matches/:id", verifyAdminToken, async (req: express.Reque
 app.post("/api/admin/matches/:id/start-live", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   try {
-    const updated = await dbMatch.updateById(id, { status: "Live", goals: [], cards: [] });
+    const updated = await dbMatch.updateById(id, { 
+      status: "Live", 
+      goals: [], 
+      cards: [],
+      timerLastStarted: new Date().toISOString(),
+      timerAccumulatedTime: 0
+    });
     if (!updated) return res.status(404).json({ message: "Match not found." });
     res.json({ message: "Match started live.", match: updated });
   } catch (err: any) {
@@ -640,7 +646,7 @@ app.post("/api/admin/matches/:id/start-live", verifyAdminToken, async (req: expr
 // POST /api/admin/matches/:id/record-goal
 app.post("/api/admin/matches/:id/record-goal", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { playerId, playerName, jerseyNumber, team } = req.body;
+  const { playerId, playerName, jerseyNumber, team, timerLastStarted, timerAccumulatedTime } = req.body;
 
   try {
     const match = await dbMatch.findById(id);
@@ -663,7 +669,9 @@ app.post("/api/admin/matches/:id/record-goal", verifyAdminToken, async (req: exp
     const updated = await dbMatch.updateById(id, {
       goals: match.goals,
       homeScore: homeGoals,
-      awayScore: awayGoals
+      awayScore: awayGoals,
+      timerLastStarted: timerLastStarted !== undefined ? timerLastStarted : match.timerLastStarted,
+      timerAccumulatedTime: timerAccumulatedTime !== undefined ? timerAccumulatedTime : match.timerAccumulatedTime
     });
 
     res.json({ message: "Goal recorded.", match: updated });
@@ -705,7 +713,7 @@ app.delete("/api/admin/matches/:id/goal/:goalIndex", verifyAdminToken, async (re
 // POST /api/admin/matches/:id/record-card
 app.post("/api/admin/matches/:id/record-card", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { playerId, playerName, jerseyNumber, team, type, timestamp } = req.body;
+  const { playerId, playerName, jerseyNumber, team, type, timestamp, timerLastStarted, timerAccumulatedTime } = req.body;
 
   try {
     const match = await dbMatch.findById(id);
@@ -723,7 +731,9 @@ app.post("/api/admin/matches/:id/record-card", verifyAdminToken, async (req: exp
     });
 
     const updated = await dbMatch.updateById(id, {
-      cards: match.cards
+      cards: match.cards,
+      timerLastStarted: timerLastStarted !== undefined ? timerLastStarted : match.timerLastStarted,
+      timerAccumulatedTime: timerAccumulatedTime !== undefined ? timerAccumulatedTime : match.timerAccumulatedTime
     });
 
     res.json({ message: "Card recorded.", match: updated });
@@ -761,11 +771,79 @@ app.delete("/api/admin/matches/:id/card/:cardIndex", verifyAdminToken, async (re
 app.post("/api/admin/matches/:id/end-live", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   try {
-    const updated = await dbMatch.updateById(id, { status: "Completed" });
+    const updated = await dbMatch.updateById(id, { 
+      status: "Completed",
+      timerLastStarted: null,
+      timerAccumulatedTime: 0
+    });
     if (!updated) return res.status(404).json({ message: "Match not found." });
     res.json({ message: "Match ended.", match: updated });
   } catch (err: any) {
     res.status(500).json({ message: "Error ending match.", error: err.message });
+  }
+});
+
+// POST /api/admin/matches/:id/sync-timer
+app.post("/api/admin/matches/:id/sync-timer", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const { timerLastStarted, timerAccumulatedTime } = req.body;
+
+  try {
+    const updated = await dbMatch.updateById(id, {
+      timerLastStarted,
+      timerAccumulatedTime
+    });
+
+    if (!updated) return res.status(404).json({ message: "Match not found." });
+    res.json({ message: "Timer synced.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error syncing timer.", error: err.message });
+  }
+});
+
+// POST /api/matches/:id/lineup
+app.post("/api/matches/:id/lineup", verifyToken, async (req: AuthenticatedRequest, res: express.Response) => {
+  const { id } = req.params;
+  const { formation, starting11, bench } = req.body;
+  const teamId = req.user?.id;
+
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    const isHome = match.homeTeamId === teamId;
+    const isAway = match.awayTeamId === teamId;
+
+    if (!isHome && !isAway && req.user?.role !== 'admin') {
+      return res.status(403).json({ message: "Unauthorized: You are not a participant in this match." });
+    }
+
+    const update: any = {};
+    if (isHome) update.homeLineup = { formation, starting11, bench };
+    if (isAway) update.awayLineup = { formation, starting11, bench };
+
+    const updated = await dbMatch.updateById(id, update);
+    res.json({ message: "Lineup successfully submitted.", match: updated });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error committing lineup.", error: err.message });
+  }
+});
+
+// GET /api/matches/:id/rosters
+app.get("/api/matches/:id/rosters", verifyToken, async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  try {
+    const match = await dbMatch.findById(id);
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    const [homePlayers, awayPlayers] = await Promise.all([
+      dbPlayer.find({ teamId: match.homeTeamId }),
+      dbPlayer.find({ teamId: match.awayTeamId })
+    ]);
+
+    res.json({ homePlayers, awayPlayers });
+  } catch (err: any) {
+    res.status(500).json({ message: "Error retrieving match rosters.", error: err.message });
   }
 });
 
@@ -795,6 +873,99 @@ app.get("/api/matches/:id/goal-scorers", verifyToken, async (req: express.Reques
     });
   } catch (err: any) {
     res.status(500).json({ message: "Error fetching goal scorers.", error: err.message });
+  }
+});
+
+// GET /api/stats
+app.get("/api/stats", verifyToken, async (req: express.Request, res: express.Response) => {
+  try {
+    const matches = await dbMatch.find();
+    const teams = await dbTeam.find();
+    
+    const scorerMap: Record<string, { name: string, team: string, teamLogo: string, goals: number }> = {};
+    const disciplinaryRecords: Array<{
+      playerName: string,
+      playerId: string,
+      teamName: string,
+      teamLogo: string,
+      type: "Yellow" | "Red",
+      date: string,
+      matchMissed?: string
+    }> = [];
+
+    // Sort matches chronologically to find next fixtures for suspensions
+    const sortedMatches = [...matches].sort((a, b) => new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime());
+
+    matches.forEach(m => {
+      const homeTeam = teams.find(t => t._id.toString() === m.homeTeamId);
+      const awayTeam = teams.find(t => t._id.toString() === m.awayTeamId);
+
+      // Process Goals
+      (m.goals || []).forEach(g => {
+        const team = g.team === 'home' ? homeTeam : awayTeam;
+        if (!scorerMap[g.playerId]) {
+          scorerMap[g.playerId] = {
+            name: g.playerName,
+            team: team?.clubName || "Unknown",
+            teamLogo: team?.logoUrl || "/placeholder-logo.png",
+            goals: 0
+          };
+        }
+        scorerMap[g.playerId].goals += 1;
+      });
+
+      // Process Cards
+      (m.cards || []).forEach(c => {
+        const team = c.team === 'home' ? homeTeam : awayTeam;
+        const teamId = c.team === 'home' ? m.homeTeamId : m.awayTeamId;
+        
+        let matchMissed = undefined;
+        if (c.type === 'Red') {
+          // Find the next scheduled match for this team
+          const nextMatch = sortedMatches.find(sm => 
+            new Date(sm.matchDate) > new Date(m.matchDate) && 
+            (sm.homeTeamId === teamId || sm.awayTeamId === teamId)
+          );
+          
+          if (nextMatch) {
+            const vsTeamId = nextMatch.homeTeamId === teamId ? nextMatch.awayTeamId : nextMatch.homeTeamId;
+            const vsTeam = teams.find(t => t._id.toString() === vsTeamId);
+            matchMissed = `vs ${vsTeam?.clubName || 'TBD'} (${new Date(nextMatch.matchDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+          } else {
+            matchMissed = "Tournament Exit / Final";
+          }
+        }
+
+        disciplinaryRecords.push({
+          playerName: c.playerName,
+          playerId: c.playerId,
+          teamName: team?.clubName || "Unknown",
+          teamLogo: team?.logoUrl || "/placeholder-logo.png",
+          type: c.type,
+          date: m.matchDate,
+          matchMissed
+        });
+      });
+    });
+
+    const topScorers = Object.values(scorerMap)
+      .sort((a, b) => b.goals - a.goals)
+      .slice(0, 15);
+
+    // Sort disciplinary by date descending
+    const disciplinary = disciplinaryRecords.sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    res.json({
+      topScorers,
+      disciplinary
+    });
+  } catch (err: any) {
+    res.status(500).json({ 
+      message: "Error compiling tournament statistics.", 
+      error: err.message 
+    });
   }
 });
 

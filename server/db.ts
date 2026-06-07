@@ -57,6 +57,16 @@ export interface Match {
     type: "Yellow" | "Red";
     timestamp: string;
   }>;
+  timerLastStarted: string | null;
+  timerAccumulatedTime: number;
+  homeLineup: {
+    starting11: string[];
+    bench: string[];
+  };
+  awayLineup: {
+    starting11: string[];
+    bench: string[];
+  };
 }
 
 // -------------------------------------------------------------
@@ -114,7 +124,19 @@ const MatchSchema = new mongoose.Schema<Match>({
     team: { type: String, enum: ["home", "away"], required: true },
     type: { type: String, enum: ["Yellow", "Red"], required: true },
     timestamp: { type: String, required: true }
-  }]
+  }],
+  timerLastStarted: { type: String, default: null },
+  timerAccumulatedTime: { type: Number, default: 0 },
+  homeLineup: {
+    formation: { type: String, default: "4-4-2" },
+    starting11: [{ type: String }],
+    bench: [{ type: String }]
+  },
+  awayLineup: {
+    formation: { type: String, default: "4-4-2" },
+    starting11: [{ type: String }],
+    bench: [{ type: String }]
+  }
 });
 
 // Avoid re-compiling models if they are hot-reloaded
