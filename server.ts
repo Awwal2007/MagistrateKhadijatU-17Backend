@@ -526,7 +526,7 @@ app.put("/api/admin/teams/:id/group", verifyAdminToken, async (req: express.Requ
 });
 
 // GET /api/matches
-app.get("/api/matches", verifyToken, async (req: express.Request, res: express.Response) => {
+app.get("/api/matches", async (req: express.Request, res: express.Response) => {
   try {
     const matches = await dbMatch.find();
     
@@ -830,7 +830,7 @@ app.post("/api/matches/:id/lineup", verifyToken, async (req: AuthenticatedReques
 });
 
 // GET /api/matches/:id/rosters
-app.get("/api/matches/:id/rosters", verifyToken, async (req: express.Request, res: express.Response) => {
+app.get("/api/matches/:id/rosters", async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   try {
     const match = await dbMatch.findById(id);
@@ -848,7 +848,7 @@ app.get("/api/matches/:id/rosters", verifyToken, async (req: express.Request, re
 });
 
 // GET /api/matches/:id/goal-scorers
-app.get("/api/matches/:id/goal-scorers", verifyToken, async (req: express.Request, res: express.Response) => {
+app.get("/api/matches/:id/goal-scorers", async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   try {
     const match = await dbMatch.findById(id);
@@ -877,7 +877,7 @@ app.get("/api/matches/:id/goal-scorers", verifyToken, async (req: express.Reques
 });
 
 // GET /api/stats
-app.get("/api/stats", verifyToken, async (req: express.Request, res: express.Response) => {
+app.get("/api/stats", async (req: express.Request, res: express.Response) => {
   try {
     const matches = await dbMatch.find();
     const teams = await dbTeam.find();
@@ -970,7 +970,7 @@ app.get("/api/stats", verifyToken, async (req: express.Request, res: express.Res
 });
 
 // GET /api/standings
-app.get("/api/standings", verifyToken, async (req: express.Request, res: express.Response) => {
+app.get("/api/standings", async (req: express.Request, res: express.Response) => {
   try {
     const teams = await dbTeam.find();
     const matches = await dbMatch.find({ stage: "Group Stage", status: "Completed" });
