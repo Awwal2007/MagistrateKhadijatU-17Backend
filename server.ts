@@ -595,13 +595,15 @@ app.post(
 // PUT /api/admin/matches/:id
 app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { homeScore, awayScore, status, matchDate, round } = req.body;
-
+  const { homeScore, awayScore, status, matchDate, round, homeTeamId, awayTeamId } = req.body;
+  
   try {
     const updated = await dbMatch.updateById(id, {
       homeScore: homeScore !== undefined ? homeScore : null,
       awayScore: awayScore !== undefined ? awayScore : null,
       status: status || "Scheduled",
+      homeTeamId: homeTeamId !== undefined ? homeTeamId : undefined,
+      awayTeamId: awayTeamId !== undefined ? awayTeamId : undefined,
       round: round !== undefined ? (round || null) : undefined,
       matchDate
     });
