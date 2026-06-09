@@ -42,12 +42,14 @@ export interface Match {
   round: string | null;
   group: "A" | "B" | "C" | null;
   matchDate: string;
+  refereeId?: string | null;
   goals?: Array<{
     playerId: string;
     playerName: string;
     jerseyNumber: number;
     team: "home" | "away";
     timestamp: string;
+    matchTime?: number;
   }>;
   cards?: Array<{
     playerId: string;
@@ -56,6 +58,7 @@ export interface Match {
     team: "home" | "away";
     type: "Yellow" | "Red";
     timestamp: string;
+    matchTime?: number;
   }>;
   timerLastStarted: string | null;
   timerAccumulatedTime: number;
@@ -110,12 +113,14 @@ const MatchSchema = new mongoose.Schema<Match>({
   round: { type: String, default: null },
   group: { type: String, enum: ["A", "B", "C", null], default: null },
   matchDate: { type: String, required: true },
+  refereeId: { type: String, default: null },
   goals: [{
     playerId: { type: String, required: true },
     playerName: { type: String, required: true },
     jerseyNumber: { type: Number, required: true },
     team: { type: String, enum: ["home", "away"], required: true },
-    timestamp: { type: String, required: true }
+    timestamp: { type: String, required: true },
+    matchTime: { type: Number }
   }],
   cards: [{
     playerId: { type: String, required: true },
@@ -123,7 +128,8 @@ const MatchSchema = new mongoose.Schema<Match>({
     jerseyNumber: { type: Number, required: true },
     team: { type: String, enum: ["home", "away"], required: true },
     type: { type: String, enum: ["Yellow", "Red"], required: true },
-    timestamp: { type: String, required: true }
+    timestamp: { type: String, required: true },
+    matchTime: { type: Number }
   }],
   timerLastStarted: { type: String, default: null },
   timerAccumulatedTime: { type: Number, default: 0 },

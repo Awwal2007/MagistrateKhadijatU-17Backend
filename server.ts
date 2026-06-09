@@ -12,6 +12,7 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "MAGISTRATE_KHADIJAT_OLOYADE_SUPER_SECRET_KEY";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin@123";
+const REFEREE_PASSWORD = process.env.REFEREE_PASSWORD || "referee@123";
 
 
 
@@ -115,6 +116,16 @@ const verifyAdminToken = (req: AuthenticatedRequest, res: express.Response, next
   verifyToken(req, res, () => {
     if (req.user?.role !== "admin") {
       res.status(403).json({ message: "Access forbidden. Admin privilege required." });
+      return;
+    }
+    next();
+  });
+};
+
+const verifyRefereeToken = (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  verifyToken(req, res, () => {
+    if (req.user?.role !== "referee" && req.user?.role !== "admin") {
+      res.status(403).json({ message: "Access forbidden. Referee or Admin privilege required." });
       return;
     }
     next();
@@ -251,6 +262,27 @@ app.post("/api/auth/admin-login", async (req: express.Request, res: express.Resp
       username: "admin",
       role: "admin"
     }
+  });
+});
+
+// POST /api/auth/referee-login
+app.post("/api/auth/referee-login", async (req: express.Request, res: express.Response) => {
+  const { refereeName, password } = req.body;
+  if (!refereeName || !password) {
+    res.status(400).json({ message: "Referee Name and Password are required." });
+    return;
+  }
+
+  if (password !== REFEREE_PASSWORD) {
+    res.status(401).json({ message: "Invalid referee credentials." });
+    return;
+  }
+
+  const token = jwt.sign({ id: refereeName, username: refereeName, role: "referee" }, JWT_SECRET, { expiresIn: "1d" });
+  res.json({
+    message: "Referee authenticated.",
+    token,
+    referee: { username: refereeName, role: "referee" }
   });
 });
 
@@ -595,7 +627,7 @@ app.post(
 // PUT /api/admin/matches/:id
 app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { homeScore, awayScore, status, matchDate, round, homeTeamId, awayTeamId } = req.body;
+  const { homeScore, awayScore, status, matchDate, round, homeTeamId, awayTeamId, refereeId } = req.body;
   
   try {
     const updated = await dbMatch.updateById(id, {
@@ -605,6 +637,7 @@ app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request,
       homeTeamId: homeTeamId !== undefined ? homeTeamId : undefined,
       awayTeamId: awayTeamId !== undefined ? awayTeamId : undefined,
       round: round !== undefined ? (round || null) : undefined,
+      refereeId: refereeId !== undefined ? (refereeId || null) : undefined,
       matchDate
     });
 
@@ -646,9 +679,9 @@ app.post("/api/admin/matches/:id/start-live", verifyAdminToken, async (req: expr
 });
 
 // POST /api/admin/matches/:id/record-goal
-app.post("/api/admin/matches/:id/record-goal", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+app.post("/api/admin/matches/:id/record-goal", verifyRefereeToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { playerId, playerName, jerseyNumber, team, timerLastStarted, timerAccumulatedTime } = req.body;
+  const { playerId, playerName, jerseyNumber, team, timerLastStarted, timerAccumulatedTime, matchTime } = req.body;
 
   try {
     const match = await dbMatch.findById(id);
@@ -661,7 +694,8 @@ app.post("/api/admin/matches/:id/record-goal", verifyAdminToken, async (req: exp
       playerName,
       jerseyNumber,
       team,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      matchTime
     });
 
     // Update scores based on goals
@@ -713,9 +747,9 @@ app.delete("/api/admin/matches/:id/goal/:goalIndex", verifyAdminToken, async (re
 });
 
 // POST /api/admin/matches/:id/record-card
-app.post("/api/admin/matches/:id/record-card", verifyAdminToken, async (req: express.Request, res: express.Response) => {
+app.post("/api/admin/matches/:id/record-card", verifyRefereeToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { playerId, playerName, jerseyNumber, team, type, timestamp, timerLastStarted, timerAccumulatedTime } = req.body;
+  const { playerId, playerName, jerseyNumber, team, type, timestamp, timerLastStarted, timerAccumulatedTime, matchTime } = req.body;
 
   try {
     const match = await dbMatch.findById(id);
@@ -729,7 +763,8 @@ app.post("/api/admin/matches/:id/record-card", verifyAdminToken, async (req: exp
       jerseyNumber,
       team,
       type,
-      timestamp: timestamp || new Date().toISOString()
+      timestamp: timestamp || new Date().toISOString(),
+      matchTime
     });
 
     const updated = await dbMatch.updateById(id, {
