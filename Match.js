@@ -7,6 +7,8 @@ const matchSchema = new mongoose.Schema({
   status: { type: String, enum: ['Scheduled', 'Live', 'Completed'], default: 'Scheduled' },
   homeScore: { type: Number, default: 0 },
   awayScore: { type: Number, default: 0 },
+  homePenaltyScore: { type: Number, default: null },
+  awayPenaltyScore: { type: Number, default: null },
   goals: [{
     team: { type: String, enum: ['home', 'away'] },
     playerName: String,

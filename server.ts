@@ -615,6 +615,8 @@ app.post(
         matchDate,
         homeScore: null,
         awayScore: null,
+        homePenaltyScore: null,
+        awayPenaltyScore: null,
         status: "Scheduled"
       });
       res.status(201).json({ message: "Match scheduled successfully.", match });
@@ -627,12 +629,14 @@ app.post(
 // PUT /api/admin/matches/:id
 app.put("/api/admin/matches/:id", verifyAdminToken, async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { homeScore, awayScore, status, matchDate, round, homeTeamId, awayTeamId, refereeId } = req.body;
+  const { homeScore, awayScore, homePenaltyScore, awayPenaltyScore, status, matchDate, round, homeTeamId, awayTeamId, refereeId } = req.body;
   
   try {
     const updated = await dbMatch.updateById(id, {
       homeScore: homeScore !== undefined ? homeScore : null,
       awayScore: awayScore !== undefined ? awayScore : null,
+      homePenaltyScore: homePenaltyScore !== undefined ? homePenaltyScore : null,
+      awayPenaltyScore: awayPenaltyScore !== undefined ? awayPenaltyScore : null,
       status: status || "Scheduled",
       homeTeamId: homeTeamId !== undefined ? homeTeamId : undefined,
       awayTeamId: awayTeamId !== undefined ? awayTeamId : undefined,

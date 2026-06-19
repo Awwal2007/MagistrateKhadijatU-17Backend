@@ -37,6 +37,8 @@ export interface Match {
   awayTeamId: string;
   homeScore: number | null;
   awayScore: number | null;
+  homePenaltyScore?: number | null;
+  awayPenaltyScore?: number | null;
   status: "Scheduled" | "Live" | "Completed";
   stage: "Group Stage" | "Quarter Final" | "Semi Final" | "Final";
   round: string | null;
@@ -108,6 +110,8 @@ const MatchSchema = new mongoose.Schema<Match>({
   awayTeamId: { type: String, required: true },
   homeScore: { type: Number, default: null },
   awayScore: { type: Number, default: null },
+  homePenaltyScore: { type: Number, default: null },
+  awayPenaltyScore: { type: Number, default: null },
   status: { type: String, enum: ["Scheduled", "Live", "Completed"], default: "Scheduled" },
   stage: { type: String, enum: ["Group Stage", "Quarter Final", "Semi Final", "Final"], required: true },
   round: { type: String, default: null },
